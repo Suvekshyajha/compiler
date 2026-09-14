@@ -1,0 +1,32 @@
+16. Symbol Table Implementation
+A symbol table stores information about identifiers (name, type, address, size) used in a program. It supports CRUD operations so the compiler can insert new identifiers during declaration, look them up during usage, update them on redefinition, and remove them when they go out of scope. A linear search (findSymbol) locates entries by name; deletion shifts later elements left to keep the array compact.
+
+17. Symbol Table Construction and Scope Management
+Block-structured languages allow nested scopes, where inner blocks can declare variables that shadow outer ones. A scoped symbol table implements this using a stack of hash maps — each map represents one scope. enter_scope() pushes a new map on block entry, leave_scope() pops it on exit. insert() adds to the topmost (current) scope, flagging redeclaration if already present there. lookup() searches from the innermost scope outward to the global scope, correctly resolving shadowed names.
+
+18. Type Checking for Expressions
+Type checking ensures operations are performed on compatible types. Each expression is assigned a DataType. Binary operations follow coercion rules: same types combine directly (INT+INT→INT), mixed INT/FLOAT promotes to FLOAT (implicit widening), while incompatible combinations (e.g., INT+BOOL) are flagged as errors. Array indices must evaluate to INT, and bounds can be checked against dimensions stored in the symbol table. Errors are reported with the line number for debugging.
+
+19. Semantic Rules for Control Structures
+The Visitor design pattern separates semantic-checking logic from the AST node structure, allowing each node type (if, while, for, break, continue) to be visited without modifying the node classes. A loop_depth counter tracks nested loop context so break/continue are only valid when loop_depth > 0. Condition expressions in if/while/for must evaluate to TYPE_BOOL (or a convertible type). Variable initialization flags help detect use-before-definition.
+
+20. Intermediate Code Generation for Expressions
+Three-Address Code (TAC) breaks complex expressions into simple instructions with at most one operator, each producing a result stored in a temporary variable. The Shunting-Yard algorithm converts infix expressions to postfix notation based on operator precedence and parentheses. Postfix is then scanned left to right using a stack: operands are pushed, and when an operator is found, operands are popped, a new temporary is generated (t1, t2, …), and a quadruple (op, arg1, arg2, result) is emitted.
+
+21. TAC Generation for Control Flow Statements
+Control-flow constructs like if-else and while require jump instructions whose target labels aren't known until later parts of the code are generated. Backpatching solves this: jump instructions are emitted with an empty target, and their quadruple index is stored in a "truelist" or "falselist." Once the correct label is known, backpatch() fills it into all listed quadruples. Short-circuit &&/|| are handled by emitting conditional jumps (ifFalse cond goto …) that skip evaluating the second operand when the result is already determined.
+
+22. Intermediate Code for Functions and Parameters
+Function calls are translated into TAC using standard opcodes: FUNC_BEGIN/FUNC_END mark a function's boundaries, PARAM passes each argument, and CALL func, n invokes the function with n arguments, storing the result in a temporary. RETURN sends a value back to the caller. The compiler cross-checks the number of arguments in a call against the parameter count declared in the symbol table to catch mismatched calls at compile time.
+
+23. Code Generation
+Code generation translates TAC quadruples into target machine instructions — here, 8086 assembly. Variables and temporaries are accessed relative to the Base Pointer ([BP - offset]) since they live in the stack frame. Registers (AX, BX, CX, DX) are allocated to hold intermediate values; when all registers are busy, values are "spilled" to memory. Each function begins with a prologue (PUSH BP; MOV BP, SP; SUB SP, size) to set up its stack frame and ends with an epilogue (MOV SP, BP; POP BP; RET) to tear it down.
+
+24. Constant Folding and Constant Propagation
+Constant propagation replaces a variable with its known constant value wherever it's used, tracked via a constTable. Constant folding evaluates expressions whose operands are now both constants at compile time instead of at runtime (e.g., 4 + 5 → 9). If a variable is later reassigned a non-constant expression, it's removed from the table since it's no longer a known constant. This process repeats in multiple passes until a full pass makes no further changes (a fixed point), maximizing the constants folded.
+
+25. Dead Code Elimination and Control Flow Graph
+A program's TAC is divided into basic blocks — maximal instruction sequences with a single entry and exit. Block leaders are identified as: the first instruction, any jump target, and any instruction immediately following a jump. The Control Flow Graph (CFG) represents these blocks as nodes with directed edges for jumps between them. Liveness analysis starts from "live roots" (returns, I/O, global writes) and works backward, marking instructions that contribute to a live root; any unmarked instruction is dead code and can be safely removed.
+
+26. Peephole Optimization
+Peephole optimization scans generated assembly through a small sliding window (2–3 instructions) looking for local improvement patterns. Common patterns include: eliminating a redundant store immediately after a load of the same value, removing algebraic no-ops (ADD/SUB ...,0, MUL ...,1), simplifying MUL ...,0 to a direct zero assignment, strength-reducing multiplication by powers of two into shifts, removing a jump immediately followed by its own target label, and deleting unreachable code after an unconditional jump.
